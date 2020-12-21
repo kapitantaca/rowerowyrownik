@@ -1,0 +1,764 @@
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+        integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+        crossorigin="" />
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+        integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+        crossorigin=""></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.3/pixi.js"
+        integrity="sha512-xPzA8KIOF93rqeaC6Uz7QgGfE5e+SknGGJwCznlytA64L8ePMWu9y0VEoGgYKLIAOFfrbtA5rQwCwLjtNs1Lcw=="
+        crossorigin="anonymous"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-pixi-overlay@1.8.1/L.PixiOverlay.js"></script>
+
+    <script src="Leaflet.Control.Custom.js"></script>
+
+    <!-- JQUERY CDN -->
+    <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script> -->
+
+    <!-- FONT AWESOME CDN -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!-- BOOTSTRAP Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+        integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css"
+        integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+
+    <!-- jQuery and JS bundle w/ Popper.js -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx"
+        crossorigin="anonymous"></script>
+
+
+
+    <style type="text/css">
+        #mapid {
+            height: 100%;
+        }
+
+        .toGrey img {
+            filter: grayscale(1) invert(85%);
+        }
+
+        /*Legend specific*/
+        .legend {
+            padding: 6px 8px;
+            font: 12px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            /*box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);*/
+            /*border-radius: 5px;*/
+            line-height: 24px;
+            color: #555;
+        }
+
+        .legend h4 {
+            text-align: center;
+            font-size: 14px;
+            margin: 2px 12px 8px;
+            color: #777;
+        }
+
+        .legend span {
+            position: relative;
+            bottom: 3px;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin: 0 8px 0 0;
+            opacity: 0.7;
+        }
+
+        .legend i.icon {
+            background-size: 18px;
+            background-color: rgba(255, 255, 255, 1);
+        }
+    </style>
+
+
+</head>
+
+<body>
+    <div id="mapid"></div>
+</body>
+
+</html>
+
+
+
+<script>
+
+    function lat_to_tile(y, block_size) {
+        var zoom = 14;
+        var intermediate = (1 - Math.log(Math.tan(y * Math.PI / 180) + 1 / Math.cos(y * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom);
+        return block_size * Math.floor(Math.floor(intermediate) / block_size);
+    }
+
+    function long_to_tile(lon, block_size) {
+        var z = 14;
+        var intermediate = (lon + 180) / 360 * 16384;
+        return block_size * Math.floor(Math.floor(intermediate) / block_size);
+    }
+
+    function tile_to_lat(y) {
+        // 2^14 = 16384
+        var z = 14;
+        var n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+        return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));
+    }
+
+    function tile_to_long(x) {
+        var z = 14;
+        return (x / Math.pow(2, z) * 360 - 180);
+    }
+
+
+    function tile_to_latlong_rectangle(x, y, size) {
+        var left = tile_to_long(x)
+        //var right = tile_to_long(x + size)
+        var top = tile_to_lat(y)
+        //var bottom = tile_to_lat(y + size)
+        //return [[top, left],[bottom, left], [bottom, right], [top, right],[top,left]];
+        return [top, left];
+    }
+
+    function getOccurrence(array, value) {
+
+        if (value <= 9) {
+            return array.filter((v) => (v === value)).length;
+        } else {
+            return array.filter((v) => (v >= value)).length;
+        }
+    }
+
+    function isArrayInArray(arr, item) {
+        var item_as_string = JSON.stringify(item);
+
+        var contains = arr.some(function (ele) {
+            return JSON.stringify(ele) === item_as_string;
+        });
+        return contains;
+    }
+
+
+
+
+    var data = [];
+    var uid_dane = [];
+    var max_sqr_dane = [];
+
+    var obecnie_wysw = 0;
+    var sumy_mikrostats = [];
+    var ost_mod_kratki = '';
+    var ost_mod_user = '';
+    var square_array_columns = 0;
+    var max_square_array = [];
+
+    biezacy_json = fetch('kwadraty_mapa.json')
+        .then(response => {
+            //console.log(response.headers.get('Last-Modified'));
+            ost_mod_kratki = new Date(response.headers.get('Last-Modified'))
+            //console.log(ost_mod_kratki.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }))
+            return response.json()
+        }
+
+        )
+        .then(dane => {
+            console.log("Zaladowano wspolrzedne kwadratow");
+            data = dane;
+        });
+
+    historia_json = fetch('linki.json')
+        .then(response => {
+            ost_mod_user = new Date(response.headers.get('Last-Modified'))
+            //console.log(ost_mod_user.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }))
+            return response.json()
+        })
+        .then(dane => {
+            console.log("Zaladowano Informacje o userach")
+            uid_dane = dane;
+        });
+
+    max_sqr_json = fetch('max_sqr.json')
+        .then(response => {
+            //ost_mod_user = new Date(response.headers.get('Last-Modified'))
+            //console.log(ost_mod_user.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }))
+            return response.json()
+        })
+        .then(dane => {
+            console.log("Zaladowano max sqr")
+            max_sqr_dane = dane;
+        });
+
+
+
+
+
+
+    Promise.all([biezacy_json, historia_json, max_sqr_json]).then((values) => {
+
+
+
+
+
+
+        var mymap = L.map('mapid').setView([52.065, 19.252], 7);;
+        //mymap.setZoom(7);
+        var osm = L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data &copy; <a href="http://www.osm.org">OpenStreetMap</a>',
+            className: 'toGrey'
+        });
+        osm.addTo(mymap);
+
+
+        /*Legend specific*/
+        var legend = L.control({ position: "bottomright" });
+
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create("div", "legend");
+            div.innerHTML += "<h4>Heat lvl.</h4>";
+            div.innerHTML += '<i style="background: #4575b4"></i><span>1 os.</span><br>';
+            div.innerHTML += '<i style="background: #74add1"></i><span>2 os.</span><br>';
+            div.innerHTML += '<i style="background: #abd9e9"></i><span>3 os.</span><br>';
+            div.innerHTML += '<i style="background: #e0f3f8"></i><span>4 os.</span><br>';
+            div.innerHTML += '<i style="background: #ffffbf"></i><span>5 os.</span><br>';
+            div.innerHTML += '<i style="background: #fee090"></i><span>6 os.</span><br>';
+            div.innerHTML += '<i style="background: #fdae61"></i><span>7 os.</span><br>';
+            div.innerHTML += '<i style="background: #f46d43"></i><span>8 os.</span><br>';
+            div.innerHTML += '<i style="background: #d73027"></i><span>9 os.</span><br>';
+            div.innerHTML += '<i style="background: #b2182b"></i><span>10+ os.</span><br>';
+
+            return div;
+        };
+
+        legend.addTo(mymap);
+
+        /*
+                L.control.custom({
+                    position: 'topleft',
+                    content: '<div class="input-group">' +
+                        '    <input type="text" class="form-control input-sm" placeholder="Search">' +
+                        '    <span class="input-group-btn">' +
+                        '        <button class="btn btn-default btn-sm" type="button">Go!</button>' +
+                        '    </span>' +
+                        '</div>',
+                    classes: '',
+                    style:
+                    {
+                        position: 'absolute',
+                        left: '50px',
+                        top: '0px',
+                        width: '200px',
+                    },
+                    datas:
+                    {
+                        'foo': 'bar',
+                    },
+                    events:
+                    {
+                        click: function (data) {
+                            console.log('wrapper div element clicked');
+                            console.log(data);
+                        },
+                        dblclick: function (data) {
+                            console.log('wrapper div element dblclicked');
+                            console.log(data);
+                        },
+                        contextmenu: function (data) {
+                            console.log('wrapper div element contextmenu');
+                            console.log(data);
+                        },
+                    }
+                })
+                    .addTo(mymap);
+        */
+
+
+
+        mymap.locate({ setView: true, maxZoom: 12 });
+
+
+        var polygonLatLngs = [];
+
+        //var polygonLatLngs = [
+        //    [51.509, -0.08],
+        //    [51.503, -0.06],
+        //    [51.51, -0.047],
+        //    [51.509, -0.08]
+        //];
+        var projected_kwadrat;
+        var vis_arr = [];
+        //var nick_arr = [];
+        var kwadrat = new PIXI.Graphics();
+
+        kwadrat.interactive = true;
+
+        var pixiContainer = new PIXI.Container();
+        //var Kwadraty_container = new PIXI.Container();
+        //pixiContainer.addChild(Kwadraty_container);
+        pixiContainer.addChild(kwadrat);
+        pixiContainer.interactive = true;
+        pixiContainer.buttonMode = true;
+
+        var firstDraw = true;
+        var prevZoom;
+
+        var pixiOverlayOptions = {
+            doubleBuffering: /iPad|iPhone|iPod/.test(navigator.userAgent) && !window['MSStream'],
+            autoPreventDefault: false,
+            destroyInteractionManager: true
+        }
+
+        var pixiOverlay = L.pixiOverlay(function (utils, event) {
+            var zoom = utils.getMap().getZoom();
+            var container = utils.getContainer();
+            var renderer = utils.getRenderer();
+            var project = utils.latLngToLayerPoint;
+            var scale = utils.getScale();
+            var interaction = renderer.plugins.interaction;
+
+            if (firstDraw) {
+
+
+
+
+
+                data.forEach((u) => {
+
+                    //console.log(polygonLatLngs);
+                    //console.log(projected_kwadrat);
+                    polygonLatLngs.push(tile_to_latlong_rectangle(u.x, u.y, 1));
+                    //vis_arr.push(u.vis)
+                    vis_arr.push(u.uid.length);
+                    // max_square_array.push();
+
+                    //nick_arr.push(u.nick);
+
+                })
+
+                //mymap.removeControl(legend);
+                projected_kwadrat = polygonLatLngs.map(function (coords) { return project(coords); });
+
+                kwadrat.clear();
+                //kwadrat.lineStyle(1 / scale, 0x000000, 0.5);
+
+                projected_kwadrat.forEach(function (coords, index) {
+
+                    if (vis_arr[index] == 1) {
+                        kwadrat.beginFill(0x4575b4, 0.5);
+                    }
+                    if (vis_arr[index] == 2) {
+                        kwadrat.beginFill(0x74add1, 0.5);
+                    }
+                    if (vis_arr[index] == 3) {
+                        kwadrat.beginFill(0xabd9e9, 0.5);
+                    }
+                    if (vis_arr[index] == 4) {
+                        kwadrat.beginFill(0xe0f3f8, 0.5);
+                    }
+                    if (vis_arr[index] == 5) {
+                        kwadrat.beginFill(0xffffbf, 0.5);
+                    }
+                    if (vis_arr[index] == 6) {
+                        kwadrat.beginFill(0xfee090, 0.5);
+                    }
+                    if (vis_arr[index] == 7) {
+                        kwadrat.beginFill(0xfdae61, 0.5);
+                    }
+                    if (vis_arr[index] == 8) {
+                        kwadrat.beginFill(0xf46d43, 0.5);
+                    }
+                    if (vis_arr[index] == 9) {
+                        kwadrat.beginFill(0xd73027, 0.5);
+                    }
+                    if (vis_arr[index] >= 10) {
+                        kwadrat.beginFill(0xb2182b, 0.5);
+                    }
+
+
+
+
+                    //roznica_y = utils.latLngToLayerPoint(tile_to_lat(5359) - tile_to_lat(5360),tile_to_long(8428) - tile_to_long(8429))
+                    //roznica_x = 
+                    kwadrat.drawRect(coords.x, coords.y, 8, 8);
+                    kwadrat.endFill();
+
+                    // if (index == 0) kwadrat.moveTo(coords.x, coords.y);
+                    // else kwadrat.lineTo(coords.x, coords.y);
+                });
+
+                renderer.render(container);
+
+                wyszukiwarka_content = '<select class="custom-select" id="inlineFormCustomSelectPref"><option value="0" selected>Wszyscy</option>';
+
+                uid_dane.forEach((u) => {
+
+                    wyszukiwarka_content += "<option value='" + u.uid + "'>" + u.nick + "</option>";
+
+                })
+
+
+                L.control.custom({
+                    position: 'bottomleft',
+                    content: '<div class="legend">' +
+                        '<span><b>Suma: <span class="badge badge-primary">' + vis_arr.length + '</span> kratek</b></span><br>' +
+                        '<span>1 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 1) + '</span> kratek</span><br>' +
+                        '<span>2 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 2) + '</span> kratek</span><br>' +
+                        '<span>3 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 3) + '</span> kratek</span><br>' +
+                        '<span>4 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 4) + '</span> kratek</span><br>' +
+                        '<span>5 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 5) + '</span> kratek</span><br>' +
+                        '<span>6 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 6) + '</span> kratek</span><br>' +
+                        '<span>7 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 7) + '</span> kratek</span><br>' +
+                        '<span>8 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 8) + '</span> kratek</span><br>' +
+                        '<span>9 os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 9) + '</span> kratek</span><br>' +
+                        '<span>10> os. <span class="badge badge-secondary">' + getOccurrence(vis_arr, 10) + '</span> kratek</span>' +
+                        '<hr>' +
+                        'Uczestników: <span class="badge badge-primary">' + uid_dane.length + '</span><br>' +
+                        '<span>Ostatnie aktualizacje:<br>' +
+                        'Kratki: <small>' + ost_mod_kratki.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) + '</small><br>' +
+                        'Userzy: <small>' + ost_mod_user.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) + '</small>' +
+                        '<input type="checkbox" value="" id="poka_max">' +
+                        '<label for="poka_max" title="Pokazuje wspólny max square wszystkich uczestników">' +
+                        'Wspólny max square' +
+                        '</label>' +
+                        '<span>Rozmiar: <b>' + max_sqr_dane[0].max_sqr_size + ' x ' + max_sqr_dane[0].max_sqr_size + '</b></span>' +
+                        wyszukiwarka_content +
+                        '</select>' +
+
+
+                        '</div>',
+                    // classes: 'panel panel-default',
+                    style:
+                    {
+                        width: '165px',
+                        margin: '25px',
+                        padding: '0px',
+                    },
+                    events:
+                    {
+                        click: function (click_data) {
+                            console.log('element clicked');
+                            console.log(click_data.target.nodeName)
+
+                            if (click_data.target.nodeName == "OPTION" || click_data.target.nodeName == "SELECT" || click_data.target.nodeName == "INPUT") {
+
+                                if (click_data.target.nodeName == "INPUT") {
+
+                                    document.getElementById("inlineFormCustomSelectPref").selectedIndex = 0;
+
+                                    if (document.getElementById("poka_max").checked == true) {
+
+                                       
+
+                                        vis_arr.splice(0, vis_arr.length);
+                                        polygonLatLngs.splice(0, polygonLatLngs.length);
+                                        projected_kwadrat.splice(0, projected_kwadrat.length);
+
+                                        console.log('push poka max sqr');
+
+                                        //polygonLatLngs.push(tile_to_latlong_rectangle(uid_dane[click_data.target.value-1].max_sqr_x,uid_dane[click_data.target.value-1].max_sqr_y,1));
+                                        //console.log(tile_to_latlong_rectangle(uid_dane[click_data.target.value - 1].max_sqr_x, uid_dane[click_data.target.value - 1].max_sqr_y, 1))
+                                        var square_size = max_sqr_dane[0].max_sqr_size;
+                                        //console.log(square_size)
+
+
+                                        for (i = 0; i < square_size; i++) {
+                                            for (j = 0; j < square_size; j++) {
+
+                                                polygonLatLngs.push(tile_to_latlong_rectangle(max_sqr_dane[0].max_sqr_x - i, max_sqr_dane[0].max_sqr_y - j, 1))
+                                                vis_arr.push(-1);
+                                            }
+                                        }
+                                        //console.log(polygonLatLngs);
+                                        data.forEach((u) => {
+
+                                            //  var val = tile_to_latlong_rectangle(u.x, u.y, 1);
+
+                                            //console.log(val);
+                                            // var bool = isArrayInArray(polygonLatLngs, val)
+                                            //console.log(u)
+                                            //console.log(bool);
+                                            // if (isArrayInArray(polygonLatLngs, val) == false) {
+
+                                               // const found = polygonLatLngs.some(item => item === tile_to_latlong_rectangle(u.x, u.y, 1));
+
+                                              // if(isArrayInArray(polygonLatLngs, tile_to_latlong_rectangle(u.x, u.y, 1)) == '') {
+                                              //      console.log('DUP');
+                                              //  }
+
+                                            polygonLatLngs.push(tile_to_latlong_rectangle(u.x, u.y, 1));
+
+
+                                            vis_arr.push(5);
+
+
+                                            //nick_arr.push(u.nick);
+
+                                            //}
+
+                                        })
+                                        console.log('push done');
+
+                                    } else {
+
+                                        vis_arr.splice(0, vis_arr.length);
+                                        polygonLatLngs.splice(0, polygonLatLngs.length);
+                                        projected_kwadrat.splice(0, projected_kwadrat.length);
+
+                                        data.forEach((u) => {
+
+                                            //console.log(polygonLatLngs);
+                                            //console.log(projected_kwadrat);
+
+                                            polygonLatLngs.push(tile_to_latlong_rectangle(u.x, u.y, 1));
+                                            //vis_arr.push(u.vis)
+
+                                            vis_arr.push(u.uid.length);
+                                            //nick_arr.push(u.nick);
+
+                                        })
+                                        console.log('push 0 z checkboxa');
+
+                                        obecnie_wysw = 0;
+
+                                        
+
+                                    }
+
+
+                                } else {
+
+                                    document.getElementById("poka_max").checked = false;
+
+                                    if (Number(click_data.target.value) != obecnie_wysw) {
+                                        //console.log(click_data.target);
+                                        vis_arr.splice(0, vis_arr.length);
+                                        polygonLatLngs.splice(0, polygonLatLngs.length);
+                                        projected_kwadrat.splice(0, projected_kwadrat.length);
+
+
+
+                                        if (click_data.target.value == 0) {
+                                            console.log(click_data)
+
+                                            data.forEach((u) => {
+
+                                                //console.log(polygonLatLngs);
+                                                //console.log(projected_kwadrat);
+
+                                                polygonLatLngs.push(tile_to_latlong_rectangle(u.x, u.y, 1));
+                                                //vis_arr.push(u.vis)
+
+                                                vis_arr.push(u.uid.length);
+                                                //nick_arr.push(u.nick);
+
+                                            })
+                                            console.log('push 0');
+                                            obecnie_wysw = click_data.target.value;
+
+                                        } else {
+
+                                            console.log('push cus');
+
+                                            //polygonLatLngs.push(tile_to_latlong_rectangle(uid_dane[click_data.target.value-1].max_sqr_x,uid_dane[click_data.target.value-1].max_sqr_y,1));
+                                            //console.log(tile_to_latlong_rectangle(uid_dane[click_data.target.value - 1].max_sqr_x, uid_dane[click_data.target.value - 1].max_sqr_y, 1))
+                                            var square_size = uid_dane[click_data.target.value - 1].max_sqr_size;
+                                            //console.log(square_size)
+
+
+                                            for (i = 0; i < square_size; i++) {
+                                                for (j = 0; j < square_size; j++) {
+
+                                                    polygonLatLngs.push(tile_to_latlong_rectangle(uid_dane[click_data.target.value - 1].max_sqr_x - i, uid_dane[click_data.target.value - 1].max_sqr_y - j, 1))
+                                                    vis_arr.push(-1);
+                                                }
+                                            }
+                                            //console.log(polygonLatLngs);
+                                            data.forEach((u) => {
+
+                                                //  var val = tile_to_latlong_rectangle(u.x, u.y, 1);
+
+                                                //console.log(val);
+                                                // var bool = isArrayInArray(polygonLatLngs, val)
+                                                //console.log(u)
+                                                //console.log(bool);
+                                                // if (isArrayInArray(polygonLatLngs, val) == false) {
+
+                                                polygonLatLngs.push(tile_to_latlong_rectangle(u.x, u.y, 1));
+
+                                                //vis_arr.push(u.vis)
+                                                if (u.uid.includes(Number(click_data.target.value)) == true) {
+                                                    vis_arr.push(5);
+
+                                                } else {
+                                                    vis_arr.push(1);
+
+                                                }
+                                                //nick_arr.push(u.nick);
+
+                                                //}
+
+                                            })
+                                            console.log('push done');
+                                            obecnie_wysw = click_data.target.value;
+                                        }
+                                    }
+                                }
+
+
+
+                                //mymap.removeControl(legend);
+                                projected_kwadrat = polygonLatLngs.map(function (coords) { return project(coords); });
+
+                                kwadrat.clear();
+                                //kwadrat.lineStyle(1 / scale, 0x000000, 0.5);
+
+                                projected_kwadrat.forEach(function (coords, index) {
+
+                                    if (vis_arr[index] == 1) {
+                                        kwadrat.beginFill(0x4575b4, 0.5);
+                                    }
+                                    if (vis_arr[index] == 2) {
+                                        kwadrat.beginFill(0x74add1, 0.5);
+                                    }
+                                    if (vis_arr[index] == 3) {
+                                        kwadrat.beginFill(0xabd9e9, 0.5);
+                                    }
+                                    if (vis_arr[index] == 4) {
+                                        kwadrat.beginFill(0xe0f3f8, 0.5);
+                                    }
+                                    if (vis_arr[index] == 5) {
+                                        kwadrat.beginFill(0xffffbf, 0.5);
+                                    }
+                                    if (vis_arr[index] == 6) {
+                                        kwadrat.beginFill(0xfee090, 0.5);
+                                    }
+                                    if (vis_arr[index] == 7) {
+                                        kwadrat.beginFill(0xfdae61, 0.5);
+                                    }
+                                    if (vis_arr[index] == 8) {
+                                        kwadrat.beginFill(0xf46d43, 0.5);
+                                    }
+                                    if (vis_arr[index] == 9) {
+                                        kwadrat.beginFill(0xd73027, 0.5);
+                                    }
+                                    if (vis_arr[index] >= 10) {
+                                        kwadrat.beginFill(0xb2182b, 0.5);
+                                    }
+                                    if (vis_arr[index] == -1) {
+                                        kwadrat.beginFill(0xb2182b, 0.75);
+                                    }
+
+
+
+
+                                    //roznica_y = utils.latLngToLayerPoint(tile_to_lat(5359) - tile_to_lat(5360),tile_to_long(8428) - tile_to_long(8429))
+                                    //roznica_x = 
+                                    kwadrat.drawRect(coords.x, coords.y, 8, 8);
+                                    kwadrat.endFill();
+
+                                    // if (index == 0) kwadrat.moveTo(coords.x, coords.y);
+                                    // else kwadrat.lineTo(coords.x, coords.y);
+                                });
+
+
+
+                                renderer.render(container);
+
+                            }
+
+                        },
+                        dblclick: function (click_data) {
+                            console.log('wrapper div element dblclicked');
+                            //console.log(click_data);
+                        },
+                        contextmenu: function (click_data) {
+                            console.log('wrapper div element contextmenu');
+                            ///console.log(click_data);
+                        },
+                    }
+                })
+                    .addTo(mymap);
+
+
+                projected_kwadrat = polygonLatLngs.map(function (coords) { return project(coords); });
+                // projected_kwadrat = 
+            }
+            if (firstDraw || prevZoom !== zoom) {
+
+                mymap.on('click', function (e) {
+                    //alert("Lat, Lon : " + lat_to_tile(e.latlng.lat, 1) + ", " + long_to_tile(e.latlng.lng, 1))
+                    //alert("Lat, Lon : " + data.x(e.latlng.lat,1) + ", " + long_to_tile(e.latlng.lng,1))
+
+
+                    result = data.filter(kratka => kratka.y === lat_to_tile(e.latlng.lat, 1) && kratka.x === long_to_tile(e.latlng.lng, 1));
+                    //console.log(result);
+                    //nicki_result
+
+
+
+                    if (result.length != 0) {
+                        var lista_uid = result[0].uid;
+                        //console.log(lista_uid);
+                        var string_nickow = '';
+
+                        lista_uid.forEach((u) => {
+                            //console.log(u);
+                            przypisany_nick = uid_dane.filter(tmp_uid => tmp_uid.uid == u);
+                            //console.log(przypisany_nick);
+                            string_nickow += przypisany_nick[0].nick + '<br>';
+
+                        })
+                        var popup = L.popup()
+                            .setLatLng(e.latlng)
+                            .setContent('<p>Kratka: <b>' + long_to_tile(e.latlng.lng, 1) + '</b> x <b>' + lat_to_tile(e.latlng.lat, 1) + '</b><br />Zdobywców: <b>' + result[0].uid.length + '</b><br /> <b>' + string_nickow + '</b></p>')
+                            .openOn(mymap);
+                    }
+                });
+
+
+
+
+
+
+
+
+
+
+
+            }
+            firstDraw = false;
+            prevZoom = zoom;
+            renderer.render(container);
+        }, pixiContainer, pixiOverlayOptions);
+        pixiOverlay.addTo(mymap);
+
+
+
+
+
+
+
+
+    });
+
+
+
+</script>
+

@@ -2,6 +2,7 @@
 import requests
 import pandas as pd
 import os
+import sys
 import time
 from datetime import datetime
 from requests.exceptions import HTTPError
@@ -83,26 +84,54 @@ startTime = datetime.now()
 dane_kwadraty_istnieja = os.path.isfile('./linki.json')
 if dane_kwadraty_istnieja == True:
     uid_data = pd.read_json('linki.json')
+    print(uid_data)
+    uid_data = uid_data.drop(columns=['max_sqr_size','max_sqr_x','max_sqr_y','uid'])
+
+    uid_data = uid_data.sort_values(by=['nick'], ascending=True)#.drop(columns=['uid'])
+    uid_data.reset_index(drop=True,inplace=True)
+  #  uid_data.index = uid_data.index + 1
+    uid_data['uid'] = uid_data.index + 1
+    print(uid_data)
+
+
+
 else:
     print("Ni ma pliku wejściowego!")
 
 
+
+tuple_global = []
+Lista_max_square = pd.DataFrame()
+
 try:
 
-    tuple_global = []
-    Lista_max_square = pd.DataFrame()
+
+
+    for item in range(len(uid_data)) :
     
+        response = requests.get(uid_data.loc[item, "link"] +'/api/activities?page=1')
+        response.raise_for_status()
+        print("Sprawdzanie linku "+ uid_data.loc[item, "nick"]+ ": " +uid_data.loc[item, "link"])
+        time.sleep(3)
 
+except HTTPError as http_err:
+        print(f'HTTP error occurred: {http_err}')
+        sys.exit("Ktoś ma zdechły link, elo!")
 
-    print("Rozwijanie linków:")
+   # print("Rozwijanie linków:")
 
+try:
+
+  #  for  item in enumerate(uid_data):
     for item in range(len(uid_data)) :
 
         iksy_uzyt = []
         ygreki_uzyt = []
         id_uzyt = pd.DataFrame()
-        
 
+        #print(item)
+        
+        #print(uid_data.loc["link"])
         response = requests.get(uid_data.loc[item, "link"] +'/api/activities?page=1')
         response.raise_for_status()
         # access JSOn content
@@ -144,7 +173,7 @@ try:
 
             iksy_uzyt += json_extract(jsonResponse, 'x')
             ygreki_uzyt += json_extract(jsonResponse, 'y')
-            #time.sleep(5)
+            time.sleep(3)
         lista_nickow = [uid_data.loc[item, "uid"]]*len(iksy_uzyt)
         polaczone_uzyt = [tuple(x) for x in zip(iksy_uzyt, ygreki_uzyt, lista_nickow)]
         przefiltrowane_uzyt = [x for x in polaczone_uzyt if (x[0]>7700 and x[0]<10000 and x[1]>4700 and x[1]<6500)]
@@ -200,19 +229,50 @@ try:
     #print(uid_data)
 
     #przeniesc sortowanie linkow na poczatek bo trzeba 2 raazy skrypt odpalac
-    uid_data = uid_data.drop(columns=['max_sqr_size','max_sqr_x','max_sqr_y'])
+    #uid_data = uid_data.drop(columns=['max_sqr_size','max_sqr_x','max_sqr_y'])
     #print(uid_data)
     result = pd.concat([uid_data, Lista_max_square.astype('Int64')], axis=1, sort=False)
-    result = result.sort_values(by=['nick'], ascending=True).drop(columns=['uid'])
+    #result = result.sort_values(by=['nick'], ascending=True).drop(columns=['uid'])
     #result.reset_index(drop=True,inplace=True)
-    result.index = result.index + 1
-    result['uid'] = result.index
+    #result.index = result.index + 1
+    #result['uid'] = result.index
     print(result)
     result.to_json('linki.json', orient='records',indent=1)
     #print(Lista_max_square)
     #print (dane_global)
 
+
+
+    print("Wyliczanie globalnego max_square")
+    #wyliczanie max_sqr uzytkowanika
+    df = pd.DataFrame(dane_global,columns=['x','y','uid'])
+    df = df.drop(columns=['uid'])
+        
+    col_one_arr = df['x'].to_numpy(dtype=np.int16)
+    row_one_arr = df['y'].to_numpy(dtype=np.int16)
+    #print(col_one_arr)
+    col_one_arr_max = df['x'].max()
+    row_one_arr_max = df['y'].max()
+    col_one_arr_min = df['x'].min()
+    row_one_arr_min = df['y'].min()
+    z_array = np.zeros((col_one_arr_max-col_one_arr_min+1,row_one_arr_max-row_one_arr_min+1),dtype=np.uint8)
+    z_array[col_one_arr-col_one_arr_min, row_one_arr-row_one_arr_min] = 1
+    startTime2 = datetime.now()
+    cached_array = maximalSquare(z_array)
+    maxindex = cached_array.max()
+    print(datetime.now() - startTime2)
+    pozycja = unravel_index(cached_array.argmax(axis=None), (cached_array.shape))
+
+    max_sqr_record = {
+        'max_sqr_size':maxindex, 'max_sqr_x': int(col_one_arr_min+pozycja[0]-1), 'max_sqr_y': int(row_one_arr_min+pozycja[1]-1)
+    }
+    Lista_max_square = pd.DataFrame()
+    Lista_max_square = Lista_max_square.append(max_sqr_record, ignore_index=True)
+    print("Globalny Max_square size: "+str(maxindex) +" Corner data: " + str(col_one_arr_min+pozycja[0])+", "+str(row_one_arr_min+pozycja[1]))
+    Lista_max_square.to_json('max_sqr.json', orient='records',indent=1)
+
+
 except HTTPError as http_err:
     print(f'HTTP error occurred: {http_err}')
-except Exception as err:
-    print(f'Other error occurred: {err}')
+##except Exception as err:
+##    print(f'Other error occurred: {err}')
